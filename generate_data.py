@@ -75,7 +75,6 @@ MANIFEST = {
     'buildUpGoalRewardBonus':  ('Core/BuildUpGoal/BuildUpGoalRewardBonus.csv',  ['type', 'index']),
 
     # ItemIdentify
-    'itemMerge':               ('Core/ItemIdentify/ItemMerge.csv',              ['type']),
     'itemGenerator':           ('Core/ItemIdentify/ItemGenerator.csv',          ['type']),
     'itemRaw':                 ('Core/ItemIdentify/ItemRaw.csv',                ['type']),
     'itemTool':                ('Core/ItemIdentify/ItemTool.csv',               ['type']),
@@ -83,6 +82,10 @@ MANIFEST = {
     'itemChest':               ('Core/ItemIdentify/ItemChest.csv',              None),
     'itemFood':                ('Core/ItemIdentify/ItemFood.csv',               ['type']),
     'itemCurrency':            ('Core/ItemIdentify/ItemCurrency.csv',           ['type']),
+
+    # Generators
+    'rateGenerator':           ('Core/Generators/RateGenerator.csv',            ['type', 'id']),
+    'dynamicGeneratorSpawning':('Core/Generators/DynamicGeneratorSpawning.csv', ['item_save_type']),
 
     # ItemExpand
     'itemExpand':              ('Core/ItemExpand.csv',                          ['type', 'id']),
