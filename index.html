@@ -13,69 +13,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="styles.css">
-    <style>
-        /* ── Encyclopedia local styles ───────────────────────── */
-        .encyc-sub-tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
-        }
-        .encyc-sub-tab {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-muted);
-            padding: 0.55rem 1.1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-family: 'Outfit', sans-serif;
-            transition: all 0.2s;
-        }
-        .encyc-sub-tab:hover { background: var(--glass); color: var(--text-main); }
-        .encyc-sub-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-
-        .encyc-subtab-content { display: none; }
-        .encyc-subtab-content.active { display: block; }
-
-        .filter-bar {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-            padding: 0.9rem 1.25rem;
-            margin-bottom: 1.25rem;
-        }
-        .filter-group {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            font-size: 0.82rem;
-            color: var(--text-muted);
-        }
-        .search-input {
-            background: rgba(0,0,0,0.25);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            padding: 0.45rem 0.85rem;
-            border-radius: 8px;
-            font-size: 0.88rem;
-        }
-        .search-input:focus { outline: none; border-color: var(--primary); }
-        .filter-select {
-            background: rgba(0,0,0,0.25);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            padding: 0.45rem 0.75rem;
-            border-radius: 8px;
-            font-size: 0.82rem;
-        }
-        .filter-select:focus { outline: none; border-color: var(--primary); }
-        .result-count { color: var(--text-muted); font-size: 0.82rem; margin-left: auto; white-space: nowrap; }
-
-        .data-table thead th[data-sort] { cursor: pointer; white-space: nowrap; user-select: none; }
-        .data-table thead th[data-sort]:hover { color: var(--primary); }
-    </style>
 </head>
 
 <body>
@@ -94,6 +31,10 @@
             <button class="nav-item active" data-tab="item-encyclopedia">
                 <span class="nav-icon">📚</span>
                 <span class="nav-text">Item Encyclopedia</span>
+            </button>
+            <button class="nav-item" data-tab="energy-calculator">
+                <span class="nav-icon">⚡</span>
+                <span class="nav-text">Energy Calculator</span>
             </button>
         </nav>
     </aside>
@@ -173,13 +114,6 @@
                         <input type="text" id="merge-search" placeholder="🔍 Tên hoặc ID..." class="search-input" style="min-width:200px;">
                     </div>
                     <div class="filter-group">
-                        <label>Nguồn:</label>
-                        <select id="merge-filter-src" class="filter-select">
-                            <option value="">Tất cả</option>
-                            <option value="ItemRaw">ItemRaw</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
                         <label>Type:</label>
                         <select id="merge-filter-type" class="filter-select">
                             <option value="">Tất cả</option>
@@ -192,7 +126,6 @@
                     <div class="table-container" style="max-height:600px;">
                         <table class="data-table" id="merge-table">
                             <thead><tr>
-                                <th data-sort="sourceLabel">NGUỒN</th>
                                 <th data-sort="chain">CHUỖI</th>
                                 <th data-sort="type">TYPE</th>
                                 <th data-sort="id">ID</th>
@@ -399,11 +332,146 @@
 
         </section>
 
+        <!-- ===================== TAB: ENERGY CALCULATOR ===================== -->
+        <section id="energy-calculator" class="tab-view">
+            <div class="view-header">
+                <h1>⚡ Energy Calculator</h1>
+                <p>Tính lượng energy tiêu hao để tạo ra items và recipes.</p>
+            </div>
+
+            <!-- Generator Level Selector -->
+            <div class="glass gen-level-panel" id="gen-level-panel">
+                <div class="gen-level-header">
+                    <span style="font-weight:600;color:var(--text-main)">⚙️ Cấp độ Generator</span>
+                    <div class="gen-level-controls">
+                        <label style="font-size:0.82rem;color:var(--text-muted)">Chọn cấp:</label>
+                        <select id="gen-global-level" class="filter-select" style="min-width:90px;"></select>
+                        <span id="gen-level-desc" style="font-size:0.78rem;color:var(--text-muted)"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-tab buttons -->
+            <div class="encyc-sub-tabs">
+                <button class="encyc-sub-tab active" data-subtab="energy-subtab-raw">🔗 Item Raw</button>
+                <button class="encyc-sub-tab" data-subtab="energy-subtab-recipe">📖 Recipes</button>
+            </div>
+
+            <!-- ── SUB-TAB 1: ITEM RAW ENERGY ─────────────────────────────── -->
+            <div id="energy-subtab-raw" class="encyc-subtab-content active">
+
+                <!-- Info card giải thích công thức -->
+                <div class="glass" style="padding:0.9rem 1.25rem;margin-bottom:1.25rem;font-size:0.83rem;color:var(--text-muted);border-radius:12px;line-height:1.8;">
+                    <strong style="color:var(--text-main)">Công thức:</strong>
+                    Energy/item = <span style="color:var(--energy)">cost_energy</span>
+                    ÷ (<span style="color:var(--accent)">rate%</span> / 100) — tính từ level generator đã chọn.
+                    Chain expand: energy(lv1) = energy(parent) + 1 ⚡, sau đó nhân theo sum_merge tương đối.
+                </div>
+
+                <div class="glass filter-bar">
+                    <div class="filter-group">
+                        <input type="text" id="eraw-search" placeholder="🔍 Tên hoặc ID..." class="search-input" style="min-width:200px;">
+                    </div>
+                    <div class="filter-group">
+                        <label>Type:</label>
+                        <select id="eraw-filter-type" class="filter-select">
+                            <option value="">Tất cả</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Nguồn:</label>
+                        <select id="eraw-filter-source" class="filter-select">
+                            <option value="">Tất cả</option>
+                        </select>
+                    </div>
+                    <span class="result-count" id="eraw-result-count"></span>
+                    <span style="margin-left:0.5rem;font-size:0.78rem;color:var(--text-muted);">Tổng: <strong id="eraw-total-count">0</strong></span>
+                </div>
+
+                <div class="data-table-card glass">
+                    <div class="table-container" style="max-height:600px;">
+                        <table class="data-table" id="eraw-table">
+                            <thead><tr>
+                                <th data-sort="type">TYPE</th>
+                                <th data-sort="itemId">ID</th>
+                                <th data-sort="itemName">TÊN ITEM</th>
+                                <th data-sort="sumMerge">SUM MERGE</th>
+                                <th data-sort="source">NGUỒN</th>
+                                <th data-sort="energy">⚡ ENERGY</th>
+                            </tr></thead>
+                            <tbody id="eraw-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── SUB-TAB 2: RECIPE ENERGY ───────────────────────────────── -->
+            <div id="energy-subtab-recipe" class="encyc-subtab-content">
+
+                <div class="glass" style="padding:0.9rem 1.25rem;margin-bottom:1.25rem;font-size:0.83rem;color:var(--text-muted);border-radius:12px;line-height:1.8;">
+                    <strong style="color:var(--text-main)">Công thức:</strong>
+                    Energy recipe = tổng <span style="color:var(--energy)">energy/item</span> của tất cả nguyên liệu
+                    (dùng nguồn rẻ nhất của mỗi ingredient).
+                    Items không có generator sẽ ghi <span style="color:var(--warning)">N/A</span>.
+                </div>
+
+                <div class="glass filter-bar">
+                    <div class="filter-group">
+                        <input type="text" id="erecipe-search" placeholder="🔍 Tên hoặc ID..." class="search-input" style="min-width:200px;">
+                    </div>
+                    <div class="filter-group">
+                        <label>Tool:</label>
+                        <select id="erecipe-filter-tool" class="filter-select">
+                            <option value="">Tất cả</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Type:</label>
+                        <select id="erecipe-filter-type" class="filter-select">
+                            <option value="">Tất cả</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Tính được:</label>
+                        <select id="erecipe-filter-computable" class="filter-select">
+                            <option value="">Tất cả</option>
+                            <option value="yes">Tính được đầy đủ</option>
+                            <option value="partial">Thiếu 1 phần</option>
+                            <option value="no">Không tính được</option>
+                        </select>
+                    </div>
+                    <span class="result-count" id="erecipe-result-count"></span>
+                    <span style="margin-left:0.5rem;font-size:0.78rem;color:var(--text-muted);">Tổng: <strong id="erecipe-total-count">0</strong></span>
+                </div>
+
+                <div class="data-table-card glass">
+                    <div class="table-container" style="max-height:600px;">
+                        <table class="data-table" id="erecipe-table">
+                            <thead><tr>
+                                <th data-sort="tool">TOOL</th>
+                                <th data-sort="resultType">TYPE</th>
+                                <th data-sort="resultId">ID</th>
+                                <th data-sort="resultName">TÊN MÓN</th>
+                                <th data-sort="ing1">NGUYÊN LIỆU 1</th>
+                                <th data-sort="ing2">NGUYÊN LIỆU 2</th>
+                                <th data-sort="ing3">NGUYÊN LIỆU 3</th>
+                                <th data-sort="totalEnergy">⚡ TỔNG ENERGY</th>
+                            </tr></thead>
+                            <tbody id="erecipe-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
         </div>
     </main>
 
     <script src="js/data.js"></script>
+    <script src="js/tableUtils.js"></script>
     <script src="js/itemEncyclopedia.js"></script>
+    <script src="js/energyCalc.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

@@ -1,133 +1,71 @@
 /**
  * itemEncyclopedia.js — Tab: Item Encyclopedia
  *
- * Performance: mỗi row pre-render HTML một lần khi init.
- * render() chỉ filter index + join chuỗi đã cache — không tạo DOM mới.
+ * Mỗi sub-tab có pattern: buildRows() → pre-render HTML cache một lần,
+ * render() chỉ filter + sort + join chuỗi đã cache.
  *
- * Sub-tabs:
- *   1. Merge Items   — itemRaw + energy cost từ RateGenerator
- *   2. Generators    — rateGenerator (join itemGenerator để lấy tên)
- *   3. Recipes       — itemFood × formuaRecipes (active / missing)
- *   4. Tool          — itemTool
- *   5. Other         — itemFood, itemBooster, itemChest, itemCurrency
+ * Phụ thuộc: TableUtils (js/tableUtils.js), window.GameData (js/data.js)
  */
 
 const ItemEncyclopedia = (() => {
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    const { $, setText, badge, formatTime, fillSelect, bindFilters,
+            sortByKey, bindSort, renderRows, initSubTabs,
+            createChainCounter, sellBadge } = TableUtils;
 
-    function $(id) { return document.getElementById(id); }
-    function setText(id, val) { const el = $(id); if (el) el.textContent = val; }
+    // ── Shared item sources cho tab Other ────────────────────────────────────
 
-    function badge(text, bg, border, color) {
-        return `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:0.72rem;font-weight:500;background:${bg};border:1px solid ${border};color:${color};">${text}</span>`;
+    const OTHER_SOURCES = [
+        { key: 'itemFood',     label: 'Food',     color: '#4ade80' },
+        { key: 'itemBooster',  label: 'Booster',  color: '#f472b6' },
+        { key: 'itemChest',    label: 'Chest',    color: '#fbbf24' },
+        { key: 'itemCurrency', label: 'Currency', color: '#34d399' },
+    ];
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // HELPERS BUILD ROW HTML
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /** Build energy cell HTML cho merge items */
+    function buildEnergyCell(ei) {
+        if (!ei) return `<span style="color:var(--text-muted)">—</span>`;
+        return `<span class="mono" style="color:var(--energy)">${ei.energy} ⚡</span>`
+             + `<br><span style="font-size:0.72rem;color:var(--text-muted)">${ei.genType}</span>`;
     }
 
-    function formatTime(sec) {
-        sec = Math.round(parseFloat(sec) || 0);
-        if (!sec)        return '—';
-        if (sec < 60)    return sec + 's';
-        if (sec < 3600)  return Math.round(sec / 60) + 'm';
-        if (sec < 86400) return (sec / 3600).toFixed(1) + 'h';
-        return (sec / 86400).toFixed(1) + 'd';
-    }
-
-    function fillSelect(id, values) {
-        const sel = $(id);
-        if (!sel) return;
-        while (sel.options.length > 1) sel.remove(1);
-        values.forEach(v => {
-            const opt = document.createElement('option');
-            opt.value = opt.textContent = v;
-            sel.appendChild(opt);
-        });
-    }
-
-    function sortByKey(a, b, key, asc) {
-        const NUMERIC = new Set(['id','merge_to','sell_price','sum_merge','chain','energy','time','cost_energy','time_cooldown']);
-        let va = a[key] ?? '', vb = b[key] ?? '';
-        if (NUMERIC.has(key)) {
-            va = parseFloat(va) || 0; vb = parseFloat(vb) || 0;
-            return asc ? va - vb : vb - va;
-        }
-        va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
-        return asc ? va.localeCompare(vb) : vb.localeCompare(va);
-    }
-
-    // Render tbody từ mảng rows đã có .html cache, giới hạn MAX rows
-    const MAX_ROWS = 2000;
-    function renderRows(tbodyId, rows, colSpan) {
-        const tbody = $(tbodyId);
-        if (!tbody) return;
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;color:var(--text-muted);padding:2rem;">Không tìm thấy.</td></tr>`;
-            return;
-        }
-        const slice = rows.length > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows;
-        let html = slice.map(r => r.html).join('');
-        if (rows.length > MAX_ROWS)
-            html += `<tr><td colspan="${colSpan}" style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:0.6rem;">... và ${(rows.length - MAX_ROWS).toLocaleString()} items nữa — thu hẹp bộ lọc.</td></tr>`;
-        tbody.innerHTML = html;
-    }
-
-    // Sub-tab navigation
-    function initSubTabs() {
-        document.querySelectorAll('.encyc-sub-tab').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.encyc-sub-tab').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.encyc-subtab-content').forEach(p => p.classList.remove('active'));
-                btn.classList.add('active');
-                const panel = document.getElementById(btn.getAttribute('data-subtab'));
-                if (panel) panel.classList.add('active');
-            });
-        });
-    }
-
-    // Sort header helper — gắn event và cập nhật ký hiệu ↑↓
-    function bindSort(tableId, getSortState, setSortState, renderFn) {
-        document.querySelectorAll(`#${tableId} thead th[data-sort]`).forEach(th => {
-            th.addEventListener('click', () => {
-                const { key, asc } = getSortState();
-                const newKey = th.getAttribute('data-sort');
-                const newAsc = (key === newKey) ? !asc : true;
-                setSortState(newKey, newAsc);
-                // Cập nhật indicator
-                document.querySelectorAll(`#${tableId} thead th[data-sort]`).forEach(h => {
-                    h.textContent = h.textContent.replace(/ [↑↓]$/, '');
-                });
-                th.textContent += newAsc ? ' ↑' : ' ↓';
-                renderFn();
-            });
-        });
+    /** Build ingredient cell HTML cho recipe */
+    function buildIngCell(type, id) {
+        if (!type && !id) return '';
+        return `<div style="white-space:nowrap">`
+             + `<span style="color:var(--accent);font-size:0.78rem">${type}</span> `
+             + `<span class="mono" style="color:var(--energy);font-size:0.78rem">${id}</span>`
+             + `</div>`;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // SUB-TAB 1: MERGE ITEMS (itemRaw)
+    // SUB-TAB 1: MERGE ITEMS
     // ═════════════════════════════════════════════════════════════════════════
 
-    function initMergeItems() {
-        const data = window.GameData;
-
-        // energy cost: lấy generator cấp thấp nhất (id nhỏ nhất) spawn ra item đó
-        const energyMap = {};
-        (data.rateGenerator || []).forEach(row => {
+    /** Xây energy map: item_id → { energy, genId, genType } dùng generator cấp thấp nhất */
+    function buildEnergyMap(rateGeneratorRows) {
+        const map = {};
+        rateGeneratorRows.forEach(row => {
             if (!row.item_id || !row.cost_energy) return;
             const itemId = row.item_id.trim();
             const genId  = parseInt(row.id) || 0;
-            if (!energyMap[itemId] || genId < energyMap[itemId].genId)
-                energyMap[itemId] = { energy: parseFloat(row.cost_energy), genId, genType: row.type };
+            const existing = map[itemId];
+            if (!existing || genId < existing.genId) {
+                map[itemId] = { energy: parseFloat(row.cost_energy), genId, genType: row.type };
+            }
         });
+        return map;
+    }
 
-        let chain = 0, lastType = '';
-        const allRows = (data.itemRaw || []).map(item => {
-            if (item.type && item.type !== lastType) { chain++; lastType = item.type; }
-            const ei = energyMap[item.id] || null;
-            const energyCell = ei
-                ? `<span class="mono" style="color:var(--energy)">${ei.energy} ⚡</span><br><span style="font-size:0.72rem;color:var(--text-muted)">${ei.genType}</span>`
-                : `<span style="color:var(--text-muted)">—</span>`;
-            const canSell = (item.can_sell || '').toUpperCase() === 'TRUE'
-                ? `<span style="color:var(--success)">✓</span>`
-                : `<span style="color:var(--danger)">✗</span>`;
+    function buildMergeRows(itemRaw, energyMap) {
+        const counter = createChainCounter();
+        return itemRaw.map(item => {
+            const chain = counter.count(item.type);
+            const ei    = energyMap[item.id] || null;
             return {
                 chain, type: item.type || '', id: item.id || '',
                 name: item.name_item || '', merge_to: item.merge_to || '',
@@ -141,11 +79,17 @@ const ItemEncyclopedia = (() => {
                     <td class="mono" style="color:var(--text-muted)">${item.merge_to || ''}</td>
                     <td class="mono">${item.sell_price || ''}</td>
                     <td class="mono">${item.sum_merge || ''}</td>
-                    <td>${energyCell}</td>
-                    <td style="text-align:center">${canSell}</td>
+                    <td>${buildEnergyCell(ei)}</td>
+                    <td style="text-align:center">${sellBadge(item.can_sell)}</td>
                 </tr>`,
             };
         });
+    }
+
+    function initMergeItems() {
+        const data    = window.GameData;
+        const energyMap = buildEnergyMap(data.rateGenerator || []);
+        const allRows   = buildMergeRows(data.itemRaw || [], energyMap);
 
         setText('merge-total-count', allRows.length.toLocaleString());
         fillSelect('merge-filter-type', [...new Set(allRows.map(r => r.type).filter(Boolean))].sort());
@@ -155,22 +99,19 @@ const ItemEncyclopedia = (() => {
         function render() {
             const search = ($('merge-search')?.value || '').toLowerCase().trim();
             const typeF  = $('merge-filter-type')?.value || '';
-
-            let filtered = allRows.filter(r => {
-                if (typeF && r.type !== typeF) return false;
-                if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
-                return true;
-            });
-            filtered.sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
+            const filtered = allRows
+                .filter(r => {
+                    if (typeF   && r.type !== typeF) return false;
+                    if (search  && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
+                    return true;
+                })
+                .sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
             setText('merge-result-count', filtered.length.toLocaleString() + ' items');
             renderRows('merge-body', filtered, 9);
         }
 
         bindSort('merge-table', () => ({ key: sortKey, asc: sortAsc }), (k, a) => { sortKey = k; sortAsc = a; }, render);
-        ['merge-search', 'merge-filter-type'].forEach(id => {
-            $(id)?.addEventListener('input', render);
-            $(id)?.addEventListener('change', render);
-        });
+        bindFilters(['merge-search', 'merge-filter-type'], render);
         render();
     }
 
@@ -178,32 +119,34 @@ const ItemEncyclopedia = (() => {
     // SUB-TAB 2: GENERATORS
     // ═════════════════════════════════════════════════════════════════════════
 
-    function initGenerators() {
-        const data = window.GameData;
-
-        const genMap = {};
-        (data.rateGenerator || []).forEach(row => {
+    /** Gộp các row rateGenerator theo type+id, collect spawn items */
+    function buildGenMap(rateGeneratorRows) {
+        const map = {};
+        rateGeneratorRows.forEach(row => {
             const key = row.type + '_' + row.id;
-            if (!genMap[key]) genMap[key] = {
-                type: row.type, id: row.id,
-                cost_energy: row.cost_energy || '', time_cooldown: row.time_cooldown || '',
-                min_count: row.min_count || '', max_count: row.max_count || '',
-                items: [],
-            };
-            if (row.item_id) genMap[key].items.push({ item_id: row.item_id, rate: row.rate || '' });
+            if (!map[key]) {
+                map[key] = {
+                    type: row.type, id: row.id,
+                    cost_energy: row.cost_energy || '', time_cooldown: row.time_cooldown || '',
+                    min_count: row.min_count || '', max_count: row.max_count || '',
+                    items: [],
+                };
+            }
+            if (row.item_id) map[key].items.push({ item_id: row.item_id, rate: row.rate || '' });
         });
+        return map;
+    }
 
-        const nameMap = {};
-        (data.itemGenerator || []).forEach(r => { if (r.id) nameMap[r.id] = r.name_item || ''; });
-
-        const allRows = Object.values(genMap).map(r => {
+    function buildGeneratorRows(genMap, nameMap) {
+        return Object.values(genMap).map(r => {
             const name = nameMap[r.id] || '—';
             const spawnList = r.items.map(it =>
                 `<span class="mono" style="color:var(--energy)">${it.item_id}</span>`
                 + (it.rate ? `<span style="color:var(--text-muted);font-size:0.75rem"> ${it.rate}%</span>` : '')
             ).join(' · ');
             return {
-                type: r.type, id: r.id, cost_energy: r.cost_energy, time_cooldown: r.time_cooldown,
+                type: r.type, id: r.id,
+                cost_energy: r.cost_energy, time_cooldown: r.time_cooldown,
                 html: `<tr>
                     <td style="color:var(--accent)">${r.type}</td>
                     <td class="mono" style="color:var(--energy)">${r.id}</td>
@@ -215,6 +158,15 @@ const ItemEncyclopedia = (() => {
                 </tr>`,
             };
         });
+    }
+
+    function initGenerators() {
+        const data   = window.GameData;
+        const genMap = buildGenMap(data.rateGenerator || []);
+        const nameMap = {};
+        (data.itemGenerator || []).forEach(r => { if (r.id) nameMap[r.id] = r.name_item || ''; });
+
+        const allRows = buildGeneratorRows(genMap, nameMap);
 
         setText('gen-total-count', allRows.length.toLocaleString());
         fillSelect('gen-filter-type', [...new Set(allRows.map(r => r.type).filter(Boolean))].sort());
@@ -224,35 +176,32 @@ const ItemEncyclopedia = (() => {
         function render() {
             const search = ($('gen-search')?.value || '').toLowerCase().trim();
             const typeF  = $('gen-filter-type')?.value || '';
-            let filtered = allRows.filter(r => {
-                if (typeF && r.type !== typeF) return false;
-                if (search && !r.type.toLowerCase().includes(search) && !r.id.includes(search)) return false;
-                return true;
-            });
-            filtered.sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
+            const filtered = allRows
+                .filter(r => {
+                    if (typeF  && r.type !== typeF) return false;
+                    if (search && !r.type.toLowerCase().includes(search) && !r.id.includes(search)) return false;
+                    return true;
+                })
+                .sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
             setText('gen-result-count', filtered.length.toLocaleString() + ' generators');
             renderRows('gen-body', filtered, 7);
         }
 
         bindSort('gen-table', () => ({ key: sortKey, asc: sortAsc }), (k, a) => { sortKey = k; sortAsc = a; }, render);
-        ['gen-search', 'gen-filter-type'].forEach(id => {
-            $(id)?.addEventListener('input', render);
-            $(id)?.addEventListener('change', render);
-        });
+        bindFilters(['gen-search', 'gen-filter-type'], render);
         render();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // SUB-TAB 3: RECIPES (itemFood × formuaRecipes)
+    // SUB-TAB 3: RECIPES
     // ═════════════════════════════════════════════════════════════════════════
 
-    function initRecipes() {
-        const data = window.GameData;
-
-        const formulaMap = {};
-        (data.formuaRecipes || []).forEach(r => {
+    /** Build formula lookup map: "ResultType_ResultId" → formula object */
+    function buildFormulaMap(formuaRecipes) {
+        const map = {};
+        formuaRecipes.forEach(r => {
             const key = (r['ResultType'] || '') + '_' + (r['ResultId'] || '');
-            formulaMap[key] = {
+            map[key] = {
                 tool:     r['TypeTool'] || '',
                 time:     r['TimeToCook(sec)'] || '',
                 ing1Type: r['Ingredient1Type'] || '', ing1Id: r['Ingredient1Id'] || '',
@@ -260,19 +209,17 @@ const ItemEncyclopedia = (() => {
                 ing3Type: r['Ingredient3Type'] || '', ing3Id: r['Ingredient3Id'] || '',
             };
         });
+        return map;
+    }
 
-        const makeIng = (type, id) => (type || id)
-            ? `<div style="white-space:nowrap"><span style="color:var(--accent);font-size:0.78rem">${type}</span> <span class="mono" style="color:var(--energy);font-size:0.78rem">${id}</span></div>`
-            : '';
+    function buildRecipeRows(itemFood, formulaMap) {
+        const counter = createChainCounter();
+        return itemFood.map(item => {
+            const chain = counter.count(item.type);
+            const key   = (item.type || '') + '_' + (item.id || '');
+            const f     = formulaMap[key] || null;
 
-        let chain = 0, lastType = '';
-        const allRows = (data.itemFood || []).map(item => {
-            if (item.type && item.type !== lastType) { chain++; lastType = item.type; }
-            const key = (item.type || '') + '_' + (item.id || '');
-            const f   = formulaMap[key] || null;
-            const hasRecipe = !!f;
-
-            const statusBadge = hasRecipe
+            const statusBadge = f
                 ? badge('✓ Active',  'rgba(34,197,94,0.12)',  '#22c55e88', '#4ade80')
                 : badge('✗ Missing', 'rgba(239,68,68,0.12)',  '#ef444488', '#f87171');
 
@@ -281,15 +228,17 @@ const ItemEncyclopedia = (() => {
                 : '—';
 
             const ings = f
-                ? [makeIng(f.ing1Type, f.ing1Id), makeIng(f.ing2Type, f.ing2Id), makeIng(f.ing3Type, f.ing3Id)].filter(Boolean).join('') || '—'
+                ? [buildIngCell(f.ing1Type, f.ing1Id),
+                   buildIngCell(f.ing2Type, f.ing2Id),
+                   buildIngCell(f.ing3Type, f.ing3Id)].filter(Boolean).join('') || '—'
                 : '—';
 
             return {
                 chain, type: item.type || '', id: item.id || '',
                 name: item.name_item || '', sell_price: item.sell_price || '',
                 tool: f?.tool || '', time: f?.time || '',
-                hasRecipe,
-                html: `<tr style="${hasRecipe ? '' : 'opacity:0.55;'}">
+                hasRecipe: !!f,
+                html: `<tr style="${f ? '' : 'opacity:0.55;'}">
                     <td>${statusBadge}</td>
                     <td class="mono" style="color:var(--text-muted);text-align:center">${chain}</td>
                     <td style="color:var(--accent)">${item.type || ''}</td>
@@ -302,6 +251,12 @@ const ItemEncyclopedia = (() => {
                 </tr>`,
             };
         });
+    }
+
+    function initRecipes() {
+        const data       = window.GameData;
+        const formulaMap = buildFormulaMap(data.formuaRecipes || []);
+        const allRows    = buildRecipeRows(data.itemFood || [], formulaMap);
 
         const activeCount  = allRows.filter(r => r.hasRecipe).length;
         const missingCount = allRows.length - activeCount;
@@ -321,26 +276,24 @@ const ItemEncyclopedia = (() => {
             const toolF   = $('recipe-filter-tool')?.value || '';
             const typeF   = $('recipe-filter-type')?.value || '';
             const statusF = $('recipe-filter-status')?.value || '';
-
-            let filtered = allRows.filter(r => {
-                if (toolF   && r.tool !== toolF)                       return false;
-                if (typeF   && r.type !== typeF)                       return false;
-                if (statusF === 'active'  && !r.hasRecipe)             return false;
-                if (statusF === 'missing' &&  r.hasRecipe)             return false;
-                if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
-                return true;
-            });
-            filtered.sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
+            const filtered = allRows
+                .filter(r => {
+                    if (toolF                          && r.tool !== toolF)   return false;
+                    if (typeF                          && r.type !== typeF)   return false;
+                    if (statusF === 'active'  && !r.hasRecipe)                return false;
+                    if (statusF === 'missing' &&  r.hasRecipe)                return false;
+                    if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
+                    return true;
+                })
+                .sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
             setText('recipe-result-count', filtered.length.toLocaleString() + ' items');
             renderRows('recipe-body', filtered, 9);
         }
 
         bindSort('recipe-table', () => ({ key: sortKey, asc: sortAsc }), (k, a) => { sortKey = k; sortAsc = a; }, render);
-        ['recipe-search', 'recipe-filter-tool', 'recipe-filter-type', 'recipe-filter-status'].forEach(id => {
-            $(id)?.addEventListener('input', render);
-            $(id)?.addEventListener('change', render);
-        });
+        bindFilters(['recipe-search', 'recipe-filter-tool', 'recipe-filter-type', 'recipe-filter-status'], render);
 
+        // Click stat card → filter nhanh
         $('recipe-stat-active-card')?.addEventListener('click', () => {
             $('recipe-filter-status').value = 'active'; render();
         });
@@ -352,18 +305,13 @@ const ItemEncyclopedia = (() => {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // SUB-TAB 4: TOOL (itemTool)
+    // SUB-TAB 4: TOOL
     // ═════════════════════════════════════════════════════════════════════════
 
-    function initTool() {
-        const data = window.GameData;
-
-        let chain = 0, lastType = '';
-        const allRows = (data.itemTool || []).map(item => {
-            if (item.type && item.type !== lastType) { chain++; lastType = item.type; }
-            const canSell = (item.can_sell || '').toUpperCase() === 'TRUE'
-                ? `<span style="color:var(--success)">✓</span>`
-                : `<span style="color:var(--danger)">✗</span>`;
+    function buildMergeItemRows(items) {
+        const counter = createChainCounter();
+        return items.map(item => {
+            const chain = counter.count(item.type);
             return {
                 chain, type: item.type || '', id: item.id || '',
                 name: item.name_item || '', merge_to: item.merge_to || '',
@@ -376,61 +324,58 @@ const ItemEncyclopedia = (() => {
                     <td class="mono" style="color:var(--text-muted)">${item.merge_to || ''}</td>
                     <td class="mono">${item.sell_price || ''}</td>
                     <td class="mono">${item.sum_merge || ''}</td>
-                    <td style="text-align:center">${canSell}</td>
+                    <td style="text-align:center">${sellBadge(item.can_sell)}</td>
                 </tr>`,
             };
         });
+    }
 
-        setText('tool-total-count', allRows.length.toLocaleString());
-        fillSelect('tool-filter-type', [...new Set(allRows.map(r => r.type).filter(Boolean))].sort());
+    function initSubTabMergeList({ dataKey, totalId, filterTypeId, searchId, resultCountId, tableId, tbodyId, colSpan }) {
+        const allRows = buildMergeItemRows(window.GameData[dataKey] || []);
+        setText(totalId, allRows.length.toLocaleString());
+        fillSelect(filterTypeId, [...new Set(allRows.map(r => r.type).filter(Boolean))].sort());
 
         let sortKey = 'chain', sortAsc = true;
 
         function render() {
-            const search = ($('tool-search')?.value || '').toLowerCase().trim();
-            const typeF  = $('tool-filter-type')?.value || '';
-
-            let filtered = allRows.filter(r => {
-                if (typeF && r.type !== typeF) return false;
-                if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
-                return true;
-            });
-            filtered.sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
-            setText('tool-result-count', filtered.length.toLocaleString() + ' items');
-            renderRows('tool-body', filtered, 8);
+            const search = ($(searchId)?.value || '').toLowerCase().trim();
+            const typeF  = $(filterTypeId)?.value || '';
+            const filtered = allRows
+                .filter(r => {
+                    if (typeF  && r.type !== typeF) return false;
+                    if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
+                    return true;
+                })
+                .sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
+            setText(resultCountId, filtered.length.toLocaleString() + ' items');
+            renderRows(tbodyId, filtered, colSpan);
         }
 
-        bindSort('tool-table', () => ({ key: sortKey, asc: sortAsc }), (k, a) => { sortKey = k; sortAsc = a; }, render);
-        ['tool-search', 'tool-filter-type'].forEach(id => {
-            $(id)?.addEventListener('input', render);
-            $(id)?.addEventListener('change', render);
-        });
+        bindSort(tableId, () => ({ key: sortKey, asc: sortAsc }), (k, a) => { sortKey = k; sortAsc = a; }, render);
+        bindFilters([searchId, filterTypeId], render);
         render();
     }
 
+    function initTool() {
+        initSubTabMergeList({
+            dataKey: 'itemTool', totalId: 'tool-total-count',
+            filterTypeId: 'tool-filter-type', searchId: 'tool-search',
+            resultCountId: 'tool-result-count', tableId: 'tool-table',
+            tbodyId: 'tool-body', colSpan: 8,
+        });
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
-    // SUB-TAB 5: OTHER (Food, Booster, Chest, Currency)
+    // SUB-TAB 5: OTHER ITEMS
     // ═════════════════════════════════════════════════════════════════════════
 
-    const OTHER_SOURCES = [
-        { key: 'itemFood',     label: 'Food',     color: '#4ade80' },
-        { key: 'itemBooster',  label: 'Booster',  color: '#f472b6' },
-        { key: 'itemChest',    label: 'Chest',    color: '#fbbf24' },
-        { key: 'itemCurrency', label: 'Currency', color: '#34d399' },
-    ];
-
-    function initOther() {
-        const data = window.GameData;
+    function buildOtherRows(data) {
         const allRows = [];
-
         OTHER_SOURCES.forEach(({ key, label, color }) => {
-            let chain = 0, lastType = '';
             const srcBadge = badge(label, color + '22', color + '88', color);
+            const counter  = createChainCounter();
             (data[key] || []).forEach(item => {
-                if (item.type && item.type !== lastType) { chain++; lastType = item.type; }
-                const canSell = (item.can_sell || '').toUpperCase() === 'TRUE'
-                    ? `<span style="color:var(--success)">✓</span>`
-                    : (item.can_sell ? `<span style="color:var(--danger)">✗</span>` : '');
+                const chain = counter.count(item.type);
                 allRows.push({
                     sourceLabel: label, color, chain,
                     type: item.type || '', id: item.id || '',
@@ -445,12 +390,16 @@ const ItemEncyclopedia = (() => {
                         <td class="mono" style="color:var(--text-muted)">${item.merge_to || ''}</td>
                         <td class="mono">${item.sell_price || ''}</td>
                         <td class="mono">${item.sum_merge || ''}</td>
-                        <td style="text-align:center">${canSell}</td>
+                        <td style="text-align:center">${sellBadge(item.can_sell)}</td>
                     </tr>`,
                 });
             });
         });
+        return allRows;
+    }
 
+    function initOther() {
+        const allRows = buildOtherRows(window.GameData);
         setText('other-total-count', allRows.length.toLocaleString());
         fillSelect('other-filter-type', [...new Set(allRows.map(r => r.type).filter(Boolean))].sort());
 
@@ -460,49 +409,51 @@ const ItemEncyclopedia = (() => {
             const search = ($('other-search')?.value || '').toLowerCase().trim();
             const srcF   = $('other-filter-src')?.value || '';
             const typeF  = $('other-filter-type')?.value || '';
-
-            let filtered = allRows.filter(r => {
-                if (srcF  && r.sourceLabel !== srcF) return false;
-                if (typeF && r.type        !== typeF) return false;
-                if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
-                return true;
-            });
-            filtered.sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
+            const filtered = allRows
+                .filter(r => {
+                    if (srcF   && r.sourceLabel !== srcF) return false;
+                    if (typeF  && r.type        !== typeF) return false;
+                    if (search && !r.name.toLowerCase().includes(search) && !r.id.includes(search)) return false;
+                    return true;
+                })
+                .sort((a, b) => sortByKey(a, b, sortKey, sortAsc));
             setText('other-result-count', filtered.length.toLocaleString() + ' items');
             renderRows('other-body', filtered, 9);
         }
 
         bindSort('other-table', () => ({ key: sortKey, asc: sortAsc }), (k, a) => { sortKey = k; sortAsc = a; }, render);
-        ['other-search', 'other-filter-src', 'other-filter-type'].forEach(id => {
-            $(id)?.addEventListener('input', render);
-            $(id)?.addEventListener('change', render);
-        });
+        bindFilters(['other-search', 'other-filter-src', 'other-filter-type'], render);
         render();
     }
 
-    // ── Global stats ──────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // GLOBAL STATS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function countUniqueGenerators(rateGeneratorRows) {
+        const seen = new Set();
+        rateGeneratorRows.forEach(r => { if (r.type && r.id) seen.add(r.type + '_' + r.id); });
+        return seen.size;
+    }
 
     function updateGlobalStats() {
         const d = window.GameData;
-        const genCount = Object.keys(
-            (d.rateGenerator || []).reduce((acc, r) => { if (r.type && r.id) acc[r.type+'_'+r.id]=1; return acc; }, {})
-        ).length;
-
         setText('stat-merge',     (d.itemRaw?.length || 0).toLocaleString());
-        setText('stat-generator', genCount.toLocaleString());
+        setText('stat-generator', countUniqueGenerators(d.rateGenerator || []).toLocaleString());
         setText('stat-recipe',    (d.itemFood?.length || 0).toLocaleString());
         setText('stat-tool',      (d.itemTool?.length || 0).toLocaleString());
         setText('stat-other',     OTHER_SOURCES.reduce((s, { key }) => s + (d[key]?.length || 0), 0).toLocaleString());
 
         const statusEl = $('data-status');
-        if (statusEl) {
-            const ok = (d.itemRaw?.length || 0) > 0;
-            statusEl.textContent = ok ? '✓ Data loaded' : '⚠ Chạy generate_data.py';
-            statusEl.style.color = ok ? 'var(--success)' : 'var(--warning)';
-        }
+        if (!statusEl) return;
+        const ok = (d.itemRaw?.length || 0) > 0;
+        statusEl.textContent = ok ? '✓ Data loaded' : '⚠ Chạy generate_data.py';
+        statusEl.style.color = ok ? 'var(--success)' : 'var(--warning)';
     }
 
-    // ── Public ────────────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // PUBLIC
+    // ═════════════════════════════════════════════════════════════════════════
 
     function init() {
         if (!window.GameData) {
@@ -520,4 +471,5 @@ const ItemEncyclopedia = (() => {
     }
 
     return { init };
+
 })();

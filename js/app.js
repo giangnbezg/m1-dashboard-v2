@@ -25,7 +25,6 @@ function initNavigation() {
 }
 
 function initModules() {
-    if (typeof ItemEncyclopedia !== 'undefined') {
-        ItemEncyclopedia.init();
-    }
+    if (typeof ItemEncyclopedia !== 'undefined') ItemEncyclopedia.init();
+    if (typeof EnergyCalc       !== 'undefined') EnergyCalc.init();
 }

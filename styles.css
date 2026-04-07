@@ -3977,3 +3977,97 @@ tr.imbalanced {
 #encyc-table thead th:hover {
     color: var(--primary);
 }
+
+/* ── Encyclopedia sub-tabs ───────────────────────── */
+.encyc-sub-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.encyc-sub-tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: 'Outfit', sans-serif;
+    transition: all 0.2s;
+}
+
+.encyc-sub-tab:hover { background: var(--glass); color: var(--text-main); }
+.encyc-sub-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+.encyc-subtab-content { display: none; }
+.encyc-subtab-content.active { display: block; }
+
+/* ── Filter bar (sub-tab) ────────────────────────── */
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.9rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.result-count {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+/* ── Sortable table headers ──────────────────────── */
+.data-table thead th[data-sort] {
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.data-table thead th[data-sort]:hover { color: var(--primary); }
+
+/* ── Table utility rows ──────────────────────────── */
+.table-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem;
+}
+
+.table-overflow-msg {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 0.6rem;
+}
+
+/* ── Generator Level Panel ───────────────────────── */
+.gen-level-panel {
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 1.25rem;
+    border-radius: 12px;
+}
+
+.gen-level-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.gen-level-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
