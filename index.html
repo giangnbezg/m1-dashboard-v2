@@ -119,7 +119,7 @@
             </div>
 
             <!-- Global Stats -->
-            <div class="stats-row">
+            <div class="stats-row" style="grid-template-columns:repeat(5,1fr)">
                 <div class="stat-card glass">
                     <span class="stat-icon">🔗</span>
                     <div class="stat-info">
@@ -138,7 +138,14 @@
                     <span class="stat-icon">📖</span>
                     <div class="stat-info">
                         <span class="stat-value mono" id="stat-recipe">0</span>
-                        <span class="stat-label">Recipes</span>
+                        <span class="stat-label">Food Items</span>
+                    </div>
+                </div>
+                <div class="stat-card glass">
+                    <span class="stat-icon">🍳</span>
+                    <div class="stat-info">
+                        <span class="stat-value mono" id="stat-tool">0</span>
+                        <span class="stat-label">Tools</span>
                     </div>
                 </div>
                 <div class="stat-card glass">
@@ -155,6 +162,7 @@
                 <button class="encyc-sub-tab active" data-subtab="subtab-merge">🔗 Merge Items</button>
                 <button class="encyc-sub-tab" data-subtab="subtab-generator">⚙️ Generators</button>
                 <button class="encyc-sub-tab" data-subtab="subtab-recipe">📖 Recipes</button>
+                <button class="encyc-sub-tab" data-subtab="subtab-tool">🍳 Tool</button>
                 <button class="encyc-sub-tab" data-subtab="subtab-other">🎁 Other Items</button>
             </div>
 
@@ -310,7 +318,41 @@
                 </div>
             </div>
 
-            <!-- ── SUB-TAB 4: OTHER ITEMS ─────────────────────────────────── -->
+            <!-- ── SUB-TAB 4: TOOL ───────────────────────────────────────── -->
+            <div id="subtab-tool" class="encyc-subtab-content">
+                <div class="glass filter-bar">
+                    <div class="filter-group">
+                        <input type="text" id="tool-search" placeholder="🔍 Tên hoặc ID..." class="search-input" style="min-width:200px;">
+                    </div>
+                    <div class="filter-group">
+                        <label>Type:</label>
+                        <select id="tool-filter-type" class="filter-select">
+                            <option value="">Tất cả</option>
+                        </select>
+                    </div>
+                    <span class="result-count" id="tool-result-count"></span>
+                    <span style="margin-left:0.5rem;font-size:0.78rem;color:var(--text-muted);">Tổng: <strong id="tool-total-count">0</strong></span>
+                </div>
+                <div class="data-table-card glass">
+                    <div class="table-container" style="max-height:600px;">
+                        <table class="data-table" id="tool-table">
+                            <thead><tr>
+                                <th data-sort="chain">CHUỖI</th>
+                                <th data-sort="type">TYPE</th>
+                                <th data-sort="id">ID</th>
+                                <th data-sort="name">TÊN TOOL</th>
+                                <th data-sort="merge_to">MERGE TO</th>
+                                <th data-sort="sell_price">GIÁ BÁN</th>
+                                <th data-sort="sum_merge">SUM MERGE</th>
+                                <th>BÁN ĐƯỢC</th>
+                            </tr></thead>
+                            <tbody id="tool-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── SUB-TAB 5: OTHER ITEMS (Food/Booster/Chest/Currency) ────── -->
             <div id="subtab-other" class="encyc-subtab-content">
                 <div class="glass filter-bar">
                     <div class="filter-group">
@@ -324,7 +366,6 @@
                             <option value="Booster">Booster</option>
                             <option value="Chest">Chest</option>
                             <option value="Currency">Currency</option>
-                            <option value="Tool">Tool</option>
                         </select>
                     </div>
                     <div class="filter-group">
